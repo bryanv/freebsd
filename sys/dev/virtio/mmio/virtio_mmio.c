@@ -426,6 +426,9 @@ vtmmio_read_ivar(device_t dev, device_t child, int index, uintptr_t *result)
 	case VIRTIO_IVAR_VENDOR:
 		*result = vtmmio_read_config_4(sc, VIRTIO_MMIO_VENDOR_ID);
 		break;
+	case VIRTIO_IVAR_MODERN:
+		*result = 0;
+		break;
 	default:
 		return (ENOENT);
 	}

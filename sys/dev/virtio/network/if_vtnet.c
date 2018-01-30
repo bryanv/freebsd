@@ -318,7 +318,7 @@ static devclass_t vtnet_devclass;
 
 DRIVER_MODULE(vtnet, virtio_mmio, vtnet_driver, vtnet_devclass,
     vtnet_modevent, 0);
-DRIVER_MODULE(vtnet, virtio_pci, vtnet_driver, vtnet_devclass,
+DRIVER_MODULE(vtnet, virtio_pci_legacy, vtnet_driver, vtnet_devclass,
     vtnet_modevent, 0);
 MODULE_VERSION(vtnet, 1);
 MODULE_DEPEND(vtnet, virtio, 1, 1, 1);
