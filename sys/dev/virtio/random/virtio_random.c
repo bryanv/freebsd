@@ -98,7 +98,7 @@ static devclass_t vtrnd_devclass;
 
 DRIVER_MODULE(virtio_random, virtio_mmio, vtrnd_driver, vtrnd_devclass,
     vtrnd_modevent, 0);
-DRIVER_MODULE(virtio_random, virtio_pci, vtrnd_driver, vtrnd_devclass,
+DRIVER_MODULE(virtio_random, virtio_pci_legacy, vtrnd_driver, vtrnd_devclass,
     vtrnd_modevent, 0);
 MODULE_VERSION(virtio_random, 1);
 MODULE_DEPEND(virtio_random, virtio, 1, 1, 1);

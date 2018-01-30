@@ -230,7 +230,7 @@ static devclass_t vtscsi_devclass;
 
 DRIVER_MODULE(virtio_scsi, virtio_mmio, vtscsi_driver, vtscsi_devclass,
     vtscsi_modevent, 0);
-DRIVER_MODULE(virtio_scsi, virtio_pci, vtscsi_driver, vtscsi_devclass,
+DRIVER_MODULE(virtio_scsi, virtio_pci_legacy, vtscsi_driver, vtscsi_devclass,
     vtscsi_modevent, 0);
 MODULE_VERSION(virtio_scsi, 1);
 MODULE_DEPEND(virtio_scsi, virtio, 1, 1, 1);

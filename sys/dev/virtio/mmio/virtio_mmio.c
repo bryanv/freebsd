@@ -346,12 +346,16 @@ vtmmio_read_ivar(device_t dev, device_t child, int index, uintptr_t *result)
 	case VIRTIO_IVAR_VENDOR:
 		*result = vtmmio_read_config_4(sc, VIRTIO_MMIO_VENDOR_ID);
 		break;
+<<<<<<< HEAD
 	case VIRTIO_IVAR_SUBVENDOR:
 	case VIRTIO_IVAR_DEVICE:
 		/*
 		 * Dummy value for fields not present in this bus.  Used by
 		 * bus-agnostic virtio_child_pnpinfo_str.
 		 */
+=======
+	case VIRTIO_IVAR_MODERN:
+>>>>>>> virtio: Add VirtIO PCI modern (V1) support
 		*result = 0;
 		break;
 	default:
