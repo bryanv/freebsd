@@ -117,7 +117,7 @@ static void	vtmmio_stop(device_t);
 static void	vtmmio_poll(device_t);
 static int	vtmmio_reinit(device_t, uint64_t);
 static void	vtmmio_reinit_complete(device_t);
-static void	vtmmio_notify_virtqueue(device_t, uint16_t);
+static void	vtmmio_notify_virtqueue(device_t, uint16_t, bus_size_t offset);
 static uint8_t	vtmmio_get_status(device_t);
 static void	vtmmio_set_status(device_t, uint8_t);
 static void	vtmmio_read_dev_config(device_t, bus_size_t, void *, int);
@@ -524,7 +524,8 @@ vtmmio_alloc_virtqueues(device_t dev, int flags, int nvqs,
 		size = vtmmio_read_config_4(sc, VIRTIO_MMIO_QUEUE_NUM_MAX);
 
 		error = virtqueue_alloc(dev, idx, size,
-		    VIRTIO_MMIO_VRING_ALIGN, 0xFFFFFFFFUL, info, &vq);
+		    VIRTIO_MMIO_QUEUE_NOTIFY, VIRTIO_MMIO_VRING_ALIGN,
+		    0xFFFFFFFFUL, info, &vq);
 		if (error) {
 			device_printf(dev,
 			    "cannot allocate virtqueue %d: %d\n",
@@ -609,13 +610,13 @@ vtmmio_reinit_complete(device_t dev)
 }
 
 static void
-vtmmio_notify_virtqueue(device_t dev, uint16_t queue)
+vtmmio_notify_virtqueue(device_t dev, uint16_t queue, bus_size_t offset)
 {
 	struct vtmmio_softc *sc;
 
 	sc = device_get_softc(dev);
 
-	vtmmio_write_config_4(sc, VIRTIO_MMIO_QUEUE_NOTIFY, queue);
+	vtmmio_write_config_4(sc, offset, queue);
 }
 
 static uint8_t

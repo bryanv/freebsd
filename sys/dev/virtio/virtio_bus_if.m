@@ -80,6 +80,7 @@ METHOD void reinit_complete {
 METHOD void notify_vq {
 	device_t	dev;
 	uint16_t	queue;
+	bus_size_t	offset;
 };
 
 METHOD int config_generation {

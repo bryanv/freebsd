@@ -119,7 +119,7 @@ static int	vtpci_setup_intr(device_t, enum intr_type);
 static void	vtpci_stop(device_t);
 static int	vtpci_reinit(device_t, uint64_t);
 static void	vtpci_reinit_complete(device_t);
-static void	vtpci_notify_virtqueue(device_t, uint16_t);
+static void	vtpci_notify_virtqueue(device_t, uint16_t, bus_size_t offset);
 static uint8_t	vtpci_get_status(device_t);
 static void	vtpci_set_status(device_t, uint8_t);
 static void	vtpci_read_dev_config(device_t, bus_size_t, void *, int);
@@ -503,8 +503,8 @@ vtpci_alloc_virtqueues(device_t dev, int flags, int nvqs,
 		vtpci_select_virtqueue(sc, idx);
 		size = vtpci_read_config_2(sc, VIRTIO_PCI_QUEUE_NUM);
 
-		error = virtqueue_alloc(dev, idx, size, VIRTIO_PCI_VRING_ALIGN,
-		    0xFFFFFFFFUL, info, &vq);
+		error = virtqueue_alloc(dev, idx, size, VIRTIO_PCI_QUEUE_NOTIFY,
+		    VIRTIO_PCI_VRING_ALIGN, 0xFFFFFFFFUL, info, &vq);
 		if (error) {
 			device_printf(dev,
 			    "cannot allocate virtqueue %d: %d\n", idx, error);
@@ -639,13 +639,13 @@ vtpci_reinit_complete(device_t dev)
 }
 
 static void
-vtpci_notify_virtqueue(device_t dev, uint16_t queue)
+vtpci_notify_virtqueue(device_t, uint16_t, bus_size_t offset)
 {
 	struct vtpci_softc *sc;
 
 	sc = device_get_softc(dev);
 
-	vtpci_write_config_2(sc, VIRTIO_PCI_QUEUE_NOTIFY, queue);
+	vtpci_write_config_2(sc, offset, queue);
 }
 
 static uint8_t
