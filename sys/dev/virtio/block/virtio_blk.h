@@ -34,16 +34,22 @@
 #define _VIRTIO_BLK_H
 
 /* Feature bits */
-#define VIRTIO_BLK_F_BARRIER	0x0001	/* Does host support barriers? */
 #define VIRTIO_BLK_F_SIZE_MAX	0x0002	/* Indicates maximum segment size */
 #define VIRTIO_BLK_F_SEG_MAX	0x0004	/* Indicates maximum # of segments */
 #define VIRTIO_BLK_F_GEOMETRY	0x0010	/* Legacy geometry available  */
 #define VIRTIO_BLK_F_RO		0x0020	/* Disk is read-only */
 #define VIRTIO_BLK_F_BLK_SIZE	0x0040	/* Block size of disk is available*/
-#define VIRTIO_BLK_F_SCSI	0x0080	/* Supports scsi command passthru */
-#define VIRTIO_BLK_F_WCE	0x0200	/* Writeback mode enabled after reset */
+#define VIRTIO_BLK_F_FLUSH	0x0200	/* Flush command supported */
 #define VIRTIO_BLK_F_TOPOLOGY	0x0400	/* Topology information is available */
 #define VIRTIO_BLK_F_CONFIG_WCE 0x0800	/* Writeback mode available in config */
+#define VIRTIO_BLK_F_MQ 	0x1000 	/* Support more than one vq */
+
+/* Legacy feature bits */
+#define VIRTIO_BLK_F_BARRIER	0x0001	/* Does host support barriers? */
+#define VIRTIO_BLK_F_SCSI	0x0080	/* Supports scsi command passthru */
+
+/* Old (deprecated) name for VIRTIO_BLK_F_FLUSH. */
+#define VIRTIO_BLK_F_WCE VIRTIO_BLK_F_FLUSH
 
 #define VIRTIO_BLK_ID_BYTES	20	/* ID string length */
 
@@ -66,15 +72,23 @@ struct virtio_blk_config {
 
 	/* Topology of the device (if VIRTIO_BLK_F_TOPOLOGY) */
 	struct virtio_blk_topology {
+		/* exponent for physical block per logical block. */
 		uint8_t physical_block_exp;
+		/* alignment offset in logical blocks. */
 		uint8_t alignment_offset;
+		/* minimum I/O size without performance penalty in logical
+		 * blocks. */
 		uint16_t min_io_size;
+		/* optimal sustained I/O size in logical blocks. */
 		uint32_t opt_io_size;
 	} topology;
 
 	/* Writeback mode (if VIRTIO_BLK_F_CONFIG_WCE) */
-	uint8_t writeback;
+	uint8_t wce;
+	uint8_t unused;
 
+	/* Number of vqs, only available when VIRTIO_BLK_F_MQ is set */
+	uint16_t num_queues;
 } __packed;
 
 /*
@@ -107,7 +121,11 @@ struct virtio_blk_config {
 /* ID string length */
 #define VIRTIO_BLK_ID_BYTES	20
 
-/* This is the first element of the read scatter-gather list. */
+/*
+ * This comes first in the read scatter-gather list.
+ * For legacy virtio, if VIRTIO_F_ANY_LAYOUT is not negotiated,
+ * this is the first element of the read scatter-gather list.
+ */
 struct virtio_blk_outhdr {
 	/* VIRTIO_BLK_T* */
 	uint32_t type;
