@@ -173,6 +173,7 @@ vtrnd_negotiate_features(struct vtrnd_softc *sc)
 	features = VTRND_FEATURES;
 
 	sc->vtrnd_features = virtio_negotiate_features(dev, features);
+	virtio_finalize_features(dev);
 }
 
 static int
