@@ -656,6 +656,12 @@ vtnet_setup_features(struct vtnet_softc *sc)
 		sc->vtnet_flags |= VTNET_FLAG_MAC;
 	}
 
+	if (virtio_with_feature(dev, VIRTIO_NET_F_MTU)) {
+		sc->vtnet_max_mtu = virtio_read_dev_config_2(dev,
+		    offsetof(struct virtio_net_config, mtu));
+	} else
+		sc->vtnet_max_mtu = VTNET_MAX_MTU;
+
 	if (virtio_with_feature(dev, VIRTIO_NET_F_MRG_RXBUF)) {
 		sc->vtnet_flags |= VTNET_FLAG_MRG_RXBUFS;
 		sc->vtnet_hdr_size = sizeof(struct virtio_net_hdr_mrg_rxbuf);
@@ -1078,6 +1084,8 @@ vtnet_rx_cluster_size(struct vtnet_softc *sc, int mtu)
 	 * the GUEST_TSO[46] features, the VirtIO specification says the
 	 * driver must only be able to receive ~1500 byte frames. But if
 	 * jumbo frames can be transmitted then try to receive jumbo.
+	 *
+	 * BMV: Not quite true when F_MTU is negotiated!
 	 */
 	if (vtnet_modern(sc)) {
 		MPASS(sc->vtnet_hdr_size == sizeof(struct virtio_net_hdr_v1));
@@ -1108,7 +1116,7 @@ vtnet_ioctl_mtu(struct vtnet_softc *sc, int mtu)
 
 	if (ifp->if_mtu == mtu)
 		return (0);
-	else if (mtu < ETHERMIN || mtu > VTNET_MAX_MTU)
+	else if (mtu < ETHERMIN || mtu > sc->vtnet_max_mtu)
 		return (EINVAL);
 
 	ifp->if_mtu = mtu;
