@@ -108,6 +108,7 @@ struct vtnet_txq {
 #endif
 	int			 vtntx_id;
 	int			 vtntx_watchdog;
+	int			 vtntx_intr_threshold;
 	struct vtnet_txq_stats	 vtntx_stats;
 	struct taskqueue	*vtntx_tq;
 	struct task		 vtntx_intrtask;
@@ -153,7 +154,6 @@ struct vtnet_softc {
 	int			 vtnet_rx_nsegs;
 	int			 vtnet_rx_nmbufs;
 	int			 vtnet_rx_clustersz;
-	int			 vtnet_tx_intr_thresh;
 	int			 vtnet_tx_nsegs;
 	int			 vtnet_if_flags;
 	int			 vtnet_max_mtu;

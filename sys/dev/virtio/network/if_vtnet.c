@@ -139,6 +139,7 @@ static int	vtnet_rxq_eof(struct vtnet_rxq *);
 static void	vtnet_rx_vq_intr(void *);
 static void	vtnet_rxq_tq_intr(void *, int);
 
+static int	vtnet_txq_intr_threshold(struct vtnet_txq *);
 static int	vtnet_txq_below_threshold(struct vtnet_txq *);
 static int	vtnet_txq_notify(struct vtnet_txq *);
 static void	vtnet_txq_free_mbufs(struct vtnet_txq *);
@@ -218,7 +219,6 @@ static void	vtnet_set_macaddr(struct vtnet_softc *);
 static void	vtnet_attached_set_macaddr(struct vtnet_softc *);
 static void	vtnet_vlan_tag_remove(struct mbuf *);
 static void	vtnet_set_rx_process_limit(struct vtnet_softc *);
-static void	vtnet_set_tx_intr_threshold(struct vtnet_softc *);
 
 static void	vtnet_setup_rxq_sysctl(struct sysctl_ctx_list *,
 		    struct sysctl_oid_list *, struct vtnet_rxq *);
@@ -1076,7 +1076,6 @@ vtnet_setup_interface(struct vtnet_softc *sc)
 	}
 
 	vtnet_set_rx_process_limit(sc);
-	vtnet_set_tx_intr_threshold(sc);
 
 	NETDUMP_SET(ifp, vtnet);
 
@@ -1976,15 +1975,42 @@ vtnet_rxq_tq_intr(void *xrxq, int pending)
 }
 
 static int
-vtnet_txq_below_threshold(struct vtnet_txq *txq)
+vtnet_txq_intr_threshold(struct vtnet_txq *txq)
 {
 	struct vtnet_softc *sc;
-	struct virtqueue *vq;
+	int threshold;
 
 	sc = txq->vtntx_sc;
+
+	/*
+	 * The Tx interrupt is disabled until the queue free count falls
+	 * below our threshold. Completed frames are drained from the Tx
+	 * virtqueue before transmitting new frames and in the watchdog
+	 * callout, so the frequency of Tx interrupts is greatly reduced,
+	 * at the cost of not freeing mbufs as quickly as they otherwise
+	 * would be.
+	 */
+	threshold = virtqueue_size(txq->vtntx_vq) / 4;
+
+	/*
+	 * Without indirect descriptors, leave enough room for the most
+	 * segments we handle.
+	 */
+	if ((sc->vtnet_flags & VTNET_FLAG_INDIRECT) == 0 &&
+	    threshold < sc->vtnet_tx_nsegs)
+		threshold = sc->vtnet_tx_nsegs;
+
+	return (threshold);
+}
+
+static int
+vtnet_txq_below_threshold(struct vtnet_txq *txq)
+{
+	struct virtqueue *vq;
+
 	vq = txq->vtntx_vq;
 
-	return (virtqueue_nfree(vq) <= sc->vtnet_tx_intr_thresh);
+	return (virtqueue_nfree(vq) <= txq->vtntx_intr_threshold);
 }
 
 static int
@@ -3009,6 +3035,7 @@ vtnet_init_tx_queues(struct vtnet_softc *sc)
 	for (i = 0; i < sc->vtnet_act_vq_pairs; i++) {
 		txq = &sc->vtnet_txqs[i];
 		txq->vtntx_watchdog = 0;
+		txq->vtntx_intr_threshold = vtnet_txq_intr_threshold(txq);
 	}
 
 	return (0);
@@ -3688,36 +3715,6 @@ vtnet_set_rx_process_limit(struct vtnet_softc *sc)
 	if (limit < 0)
 		limit = INT_MAX;
 	sc->vtnet_rx_process_limit = limit;
-}
-
-static void
-vtnet_set_tx_intr_threshold(struct vtnet_softc *sc)
-{
-	int size, thresh;
-
-	size = virtqueue_size(sc->vtnet_txqs[0].vtntx_vq);
-
-	/*
-	 * The Tx interrupt is disabled until the queue free count falls
-	 * below our threshold. Completed frames are drained from the Tx
-	 * virtqueue before transmitting new frames and in the watchdog
-	 * callout, so the frequency of Tx interrupts is greatly reduced,
-	 * at the cost of not freeing mbufs as quickly as they otherwise
-	 * would be.
-	 *
-	 * N.B. We assume all the Tx queues are the same size.
-	 */
-	thresh = size / 4;
-
-	/*
-	 * Without indirect descriptors, leave enough room for the most
-	 * segments we handle.
-	 */
-	if ((sc->vtnet_flags & VTNET_FLAG_INDIRECT) == 0 &&
-	    thresh < sc->vtnet_tx_nsegs)
-		thresh = sc->vtnet_tx_nsegs;
-
-	sc->vtnet_tx_intr_thresh = thresh;
 }
 
 static void
