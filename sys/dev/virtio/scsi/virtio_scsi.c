@@ -520,8 +520,8 @@ vtscsi_reinit(struct vtscsi_softc *sc)
 	error = virtio_reinit(dev, sc->vtscsi_features);
 	if (error == 0) {
 		vtscsi_write_device_config(sc);
-		vtscsi_reinit_event_vq(sc);
 		virtio_reinit_complete(dev);
+		vtscsi_reinit_event_vq(sc);
 
 		vtscsi_enable_vqs_intr(sc);
 	}
