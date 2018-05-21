@@ -112,6 +112,7 @@ static void	vtnet_free_rx_filters(struct vtnet_softc *);
 static int	vtnet_alloc_virtqueues(struct vtnet_softc *);
 static int	vtnet_setup_interface(struct vtnet_softc *);
 static int	vtnet_ioctl_mtu(struct vtnet_softc *, int);
+static int	vtnet_ioctl_ifflags(struct vtnet_softc *);
 static int	vtnet_ioctl(struct ifnet *, u_long, caddr_t);
 static uint64_t	vtnet_get_counter(struct ifnet *, ift_counter);
 
@@ -1139,6 +1140,43 @@ vtnet_ioctl_mtu(struct vtnet_softc *sc, int mtu)
 }
 
 static int
+vtnet_ioctl_ifflags(struct vtnet_softc *sc)
+{
+	struct ifnet *ifp;
+	int drv_running;
+
+	ifp = sc->vtnet_ifp;
+	drv_running = (ifp->if_drv_flags & IFF_DRV_RUNNING) != 0;
+
+	VTNET_CORE_LOCK_ASSERT(sc);
+
+	if ((ifp->if_flags & IFF_UP) == 0) {
+		if (drv_running)
+			vtnet_stop(sc);
+		goto out;
+	}
+
+	if (!drv_running) {
+		vtnet_init_locked(sc);
+		goto out;
+	}
+
+	if ((ifp->if_flags ^ sc->vtnet_if_flags) &
+	    (IFF_PROMISC | IFF_ALLMULTI)) {
+		if ((sc->vtnet_flags & VTNET_FLAG_CTRL_RX) == 0)
+			return (ENOTSUP);
+		vtnet_rx_filter(sc);
+	}
+
+out:
+	sc->vtnet_if_flags = ifp->if_flags;
+	return (0);
+}
+
+	return (error);
+}
+
+static int
 vtnet_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 	struct vtnet_softc *sc;
@@ -1158,26 +1196,7 @@ vtnet_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 
 	case SIOCSIFFLAGS:
 		VTNET_CORE_LOCK(sc);
-		if ((ifp->if_flags & IFF_UP) == 0) {
-			if (ifp->if_drv_flags & IFF_DRV_RUNNING)
-				vtnet_stop(sc);
-		} else if (ifp->if_drv_flags & IFF_DRV_RUNNING) {
-			if ((ifp->if_flags ^ sc->vtnet_if_flags) &
-			    (IFF_PROMISC | IFF_ALLMULTI)) {
-				if (sc->vtnet_flags & VTNET_FLAG_CTRL_RX)
-					vtnet_rx_filter(sc);
-				else {
-					ifp->if_flags |= IFF_PROMISC;
-					if ((ifp->if_flags ^ sc->vtnet_if_flags)
-					    & IFF_ALLMULTI)
-						error = ENOTSUP;
-				}
-			}
-		} else
-			vtnet_init_locked(sc);
-
-		if (error == 0)
-			sc->vtnet_if_flags = ifp->if_flags;
+		error = vtnet_ioctl_ifflags(sc);
 		VTNET_CORE_UNLOCK(sc);
 		break;
 
