@@ -683,13 +683,11 @@ vtpci_set_host_msix_vectors(struct vtpci_common *cn)
 	int idx, error;
 
 	intr = &cn->vtpci_device_interrupt;
-
 	error = vtpci_register_cfg_msix(cn, intr);
 	if (error)
 		return (error);
 
 	intr = cn->vtpci_msix_vq_interrupts;
-
 	for (idx = 0; idx < cn->vtpci_nvqs; idx++) {
 		if (cn->vtpci_vqs[idx].vtv_no_intr)
 			tintr = NULL;
@@ -825,12 +823,10 @@ vtpci_reinit_virtqueue(struct vtpci_common *cn, int idx)
 	KASSERT(vq != NULL, ("%s: vq %d not allocated", __func__, idx));
 
 	error = virtqueue_reinit(vq, vtpci_get_vq_size(cn, idx));
-	if (error)
-		return (error);
+	if (error == 0)
+		vtpci_set_vq(cn, vq);
 
-	vtpci_set_vq(cn, vq);
-
-	return (0);
+	return (error);
 }
 
 static void
