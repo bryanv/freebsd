@@ -580,19 +580,25 @@ vtpci_modern_reinit(device_t dev, uint64_t features)
 
 	/*
 	 * Quickly drive the status through ACK and DRIVER. The device does
-	 * not become usable again the driver calls reinit complete.
+	 * not become usable again until DRIVER_OK in reinit complete.
 	 */
 	vtpci_modern_set_status(sc, VIRTIO_CONFIG_STATUS_ACK);
 	vtpci_modern_set_status(sc, VIRTIO_CONFIG_STATUS_DRIVER);
 
+	/*
+	 * TODO: Check that features are not added as to what was
+	 * originally negotiated.
+	 */
 	vtpci_modern_negotiate_features(dev, features);
-	vtpci_modern_finalize_features(dev);
+	error = vtpci_modern_finalize_features(dev);
+	if (error) {
+		device_printf(dev, "cannot finalize features during reinit\n");
+		return (error);
+	}
 
 	error = vtpci_reinit(cn);
 	if (error)
 		return (error);
-
-	vtpci_modern_enable_virtqueues(sc);
 
 	return (0);
 }
@@ -604,6 +610,7 @@ vtpci_modern_reinit_complete(device_t dev)
 
 	sc = device_get_softc(dev);
 
+	vtpci_modern_enable_virtqueues(sc);
 	vtpci_modern_set_status(sc, VIRTIO_CONFIG_STATUS_DRIVER_OK);
 }
 
