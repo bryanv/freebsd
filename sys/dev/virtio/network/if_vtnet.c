@@ -113,6 +113,8 @@ static int	vtnet_alloc_virtqueues(struct vtnet_softc *);
 static int	vtnet_setup_interface(struct vtnet_softc *);
 static int	vtnet_ioctl_mtu(struct vtnet_softc *, int);
 static int	vtnet_ioctl_ifflags(struct vtnet_softc *);
+static int	vtnet_ioctl_multi(struct vtnet_softc *);
+static int	vtnet_ioctl_ifcap(struct vtnet_softc *, struct ifreq *);
 static int	vtnet_ioctl(struct ifnet *, u_long, caddr_t);
 static uint64_t	vtnet_get_counter(struct ifnet *, ift_counter);
 
@@ -1173,7 +1175,69 @@ out:
 	return (0);
 }
 
-	return (error);
+static int
+vtnet_ioctl_multi(struct vtnet_softc *sc)
+{
+	struct ifnet *ifp;
+
+	ifp = sc->vtnet_ifp;
+
+	VTNET_CORE_LOCK_ASSERT(sc);
+
+	if (sc->vtnet_flags & VTNET_FLAG_CTRL_RX &&
+	    ifp->if_drv_flags & IFF_DRV_RUNNING)
+		vtnet_rx_filter_mac(sc);
+
+	return (0);
+}
+
+static int
+vtnet_ioctl_ifcap(struct vtnet_softc *sc, struct ifreq *ifr)
+{
+	struct ifnet *ifp;
+	int mask, reinit;
+
+	ifp = sc->vtnet_ifp;
+	mask = (ifr->ifr_reqcap & ifp->if_capabilities) ^ ifp->if_capenable;
+
+	VTNET_CORE_LOCK_ASSERT(sc);
+
+	if (mask & IFCAP_TXCSUM)
+		ifp->if_capenable ^= IFCAP_TXCSUM;
+	if (mask & IFCAP_TXCSUM_IPV6)
+		ifp->if_capenable ^= IFCAP_TXCSUM_IPV6;
+	if (mask & IFCAP_TSO4)
+		ifp->if_capenable ^= IFCAP_TSO4;
+	if (mask & IFCAP_TSO6)
+		ifp->if_capenable ^= IFCAP_TSO6;
+
+	if (mask & (IFCAP_RXCSUM | IFCAP_RXCSUM_IPV6 | IFCAP_LRO |
+	    IFCAP_VLAN_HWFILTER)) {
+		/* These Rx features require us to renegotiate. */
+		reinit = 1;
+
+		if (mask & IFCAP_RXCSUM)
+			ifp->if_capenable ^= IFCAP_RXCSUM;
+		if (mask & IFCAP_RXCSUM_IPV6)
+			ifp->if_capenable ^= IFCAP_RXCSUM_IPV6;
+		if (mask & IFCAP_LRO)
+			ifp->if_capenable ^= IFCAP_LRO;
+		if (mask & IFCAP_VLAN_HWFILTER)
+			ifp->if_capenable ^= IFCAP_VLAN_HWFILTER;
+	} else
+		reinit = 0;
+
+	if (mask & IFCAP_VLAN_HWTSO)
+		ifp->if_capenable ^= IFCAP_VLAN_HWTSO;
+	if (mask & IFCAP_VLAN_HWTAGGING)
+		ifp->if_capenable ^= IFCAP_VLAN_HWTAGGING;
+
+	if (reinit && (ifp->if_drv_flags & IFF_DRV_RUNNING)) {
+		ifp->if_drv_flags &= ~IFF_DRV_RUNNING;
+		vtnet_init_locked(sc);
+	}
+
+	return (0);
 }
 
 static int
@@ -1181,7 +1245,7 @@ vtnet_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 	struct vtnet_softc *sc;
 	struct ifreq *ifr;
-	int reinit, mask, error;
+	int error;
 
 	sc = ifp->if_softc;
 	ifr = (struct ifreq *) data;
@@ -1203,9 +1267,7 @@ vtnet_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
 		VTNET_CORE_LOCK(sc);
-		if (sc->vtnet_flags & VTNET_FLAG_CTRL_RX &&
-		    ifp->if_drv_flags & IFF_DRV_RUNNING)
-			vtnet_rx_filter_mac(sc);
+		error = vtnet_ioctl_multi(sc);
 		VTNET_CORE_UNLOCK(sc);
 		break;
 
@@ -1216,46 +1278,9 @@ vtnet_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 
 	case SIOCSIFCAP:
 		VTNET_CORE_LOCK(sc);
-		mask = ifr->ifr_reqcap ^ ifp->if_capenable;
-
-		if (mask & IFCAP_TXCSUM)
-			ifp->if_capenable ^= IFCAP_TXCSUM;
-		if (mask & IFCAP_TXCSUM_IPV6)
-			ifp->if_capenable ^= IFCAP_TXCSUM_IPV6;
-		if (mask & IFCAP_TSO4)
-			ifp->if_capenable ^= IFCAP_TSO4;
-		if (mask & IFCAP_TSO6)
-			ifp->if_capenable ^= IFCAP_TSO6;
-
-		if (mask & (IFCAP_RXCSUM | IFCAP_RXCSUM_IPV6 | IFCAP_LRO |
-		    IFCAP_VLAN_HWFILTER)) {
-			/* These Rx features require us to renegotiate. */
-			reinit = 1;
-
-			if (mask & IFCAP_RXCSUM)
-				ifp->if_capenable ^= IFCAP_RXCSUM;
-			if (mask & IFCAP_RXCSUM_IPV6)
-				ifp->if_capenable ^= IFCAP_RXCSUM_IPV6;
-			if (mask & IFCAP_LRO)
-				ifp->if_capenable ^= IFCAP_LRO;
-			if (mask & IFCAP_VLAN_HWFILTER)
-				ifp->if_capenable ^= IFCAP_VLAN_HWFILTER;
-		} else
-			reinit = 0;
-
-		if (mask & IFCAP_VLAN_HWTSO)
-			ifp->if_capenable ^= IFCAP_VLAN_HWTSO;
-		if (mask & IFCAP_VLAN_HWTAGGING)
-			ifp->if_capenable ^= IFCAP_VLAN_HWTAGGING;
-
-		if (reinit && (ifp->if_drv_flags & IFF_DRV_RUNNING)) {
-			ifp->if_drv_flags &= ~IFF_DRV_RUNNING;
-			vtnet_init_locked(sc);
-		}
-
+		error = vtnet_ioctl_ifcap(sc, ifr);
 		VTNET_CORE_UNLOCK(sc);
 		VLAN_CAPABILITIES(ifp);
-
 		break;
 
 	default:
