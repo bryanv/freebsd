@@ -256,21 +256,18 @@ vtpci_legacy_detach(device_t dev)
 static int
 vtpci_legacy_suspend(device_t dev)
 {
-
 	return (bus_generic_suspend(dev));
 }
 
 static int
 vtpci_legacy_resume(device_t dev)
 {
-
 	return (bus_generic_resume(dev));
 }
 
 static int
 vtpci_legacy_shutdown(device_t dev)
 {
-
 	(void) bus_generic_shutdown(dev);
 	/* Forcibly stop the host device. */
 	vtpci_legacy_stop(dev);
@@ -281,7 +278,6 @@ vtpci_legacy_shutdown(device_t dev)
 static void
 vtpci_legacy_driver_added(device_t dev, driver_t *driver)
 {
-
 	vtpci_legacy_probe_and_attach_child(device_get_softc(dev));
 }
 
@@ -315,9 +311,6 @@ vtpci_legacy_read_ivar(device_t dev, device_t child, int index,
 	switch (index) {
 	case VIRTIO_IVAR_DEVTYPE:
 		*result = pci_get_subdevice(dev);
-		break;
-	case VIRTIO_IVAR_MODERN:
-		*result = 0;
 		break;
 	default:
 		return (vtpci_read_ivar(cn, index, result));
@@ -398,7 +391,6 @@ vtpci_legacy_setup_interrupts(device_t dev, enum intr_type type)
 static void
 vtpci_legacy_stop(device_t dev)
 {
-
 	vtpci_legacy_reset(device_get_softc(dev));
 }
 
@@ -406,9 +398,11 @@ static int
 vtpci_legacy_reinit(device_t dev, uint64_t features)
 {
 	struct vtpci_legacy_softc *sc;
+	struct vtpci_common *cn;
 	int error;
 
 	sc = device_get_softc(dev);
+	cn = &sc->vtpci_common;
 
 	/*
 	 * Redrive the device initialization. This is a bit of an abuse of
@@ -433,7 +427,7 @@ vtpci_legacy_reinit(device_t dev, uint64_t features)
 
 	vtpci_legacy_negotiate_features(dev, features);
 
-	error = vtpci_reinit(&sc->vtpci_common);
+	error = vtpci_reinit(cn);
 	if (error)
 		return (error);
 
@@ -464,14 +458,12 @@ vtpci_legacy_notify_vq(device_t dev, uint16_t queue, bus_size_t offset)
 static uint8_t
 vtpci_legacy_get_status(struct vtpci_legacy_softc *sc)
 {
-
 	return (vtpci_legacy_read_config_1(sc, VIRTIO_PCI_STATUS));
 }
 
 static void
 vtpci_legacy_set_status(struct vtpci_legacy_softc *sc, uint8_t status)
 {
-
 	if (status != VIRTIO_CONFIG_STATUS_RESET)
 		status |= vtpci_legacy_get_status(sc);
 
@@ -659,14 +651,12 @@ vtpci_legacy_register_vq_msix(device_t dev, int idx,
 static void
 vtpci_legacy_release_child_resources(struct vtpci_legacy_softc *sc)
 {
-
 	vtpci_release_child_resources(&sc->vtpci_common);
 }
 
 static void
 vtpci_legacy_reset(struct vtpci_legacy_softc *sc)
 {
-
 	/*
 	 * Setting the status to RESET sets the host device to the
 	 * original, uninitialized state.
@@ -678,7 +668,6 @@ vtpci_legacy_reset(struct vtpci_legacy_softc *sc)
 static void
 vtpci_legacy_select_virtqueue(struct vtpci_legacy_softc *sc, int idx)
 {
-
 	vtpci_legacy_write_config_2(sc, VIRTIO_PCI_QUEUE_SEL, idx);
 }
 
@@ -706,7 +695,6 @@ vtpci_legacy_get_vq_size(device_t dev, int idx)
 static bus_size_t
 vtpci_legacy_get_vq_notify_off(device_t dev, int idx)
 {
-
 	return (VIRTIO_PCI_QUEUE_NOTIFY);
 }
 
