@@ -159,8 +159,8 @@ struct vtnet_softc {
 	int			 vtnet_if_flags;
 	int			 vtnet_max_mtu;
 	int			 vtnet_act_vq_pairs;
+	int			 vtnet_req_vq_pairs;
 	int			 vtnet_max_vq_pairs;
-	int			 vtnet_requested_vq_pairs;
 
 	struct virtqueue	*vtnet_ctrl_vq;
 	struct vtnet_mac_filter	*vtnet_mac_filter;
