@@ -598,7 +598,7 @@ static void
 vtnet_negotiate_features(struct vtnet_softc *sc)
 {
 	device_t dev;
-	uint64_t features;
+	uint64_t features, negotiated_features;
 	int no_csum;
 
 	dev = sc->vtnet_dev;
@@ -624,7 +624,7 @@ vtnet_negotiate_features(struct vtnet_softc *sc)
 	features &= ~VIRTIO_NET_F_MQ;
 #endif
 
-	features = virtio_negotiate_features(dev, features);
+	negotiated_features = virtio_negotiate_features(dev, features);
 
 	if (virtio_with_feature(dev, VTNET_LRO_FEATURES) &&
 	    virtio_with_feature(dev, VIRTIO_NET_F_MRG_RXBUF) == 0) {
@@ -642,12 +642,15 @@ vtnet_negotiate_features(struct vtnet_softc *sc)
 			    "LRO disabled since both mergeable buffers and "
 			    "indirect descriptors were not negotiated\n");
 			features &= ~VTNET_LRO_FEATURES;
-			features = virtio_negotiate_features(dev, features);
+			negotiated_features =
+			    virtio_negotiate_features(dev, features);
 		} else
 			sc->vtnet_flags |= VTNET_FLAG_LRO_NOMRG;
 	}
 
-	sc->vtnet_features = sc->vtnet_negotiated_features = features;
+	sc->vtnet_features = negotiated_features;
+	sc->vtnet_negotiated_features = negotiated_features;
+
 	virtio_finalize_features(dev);
 }
 
