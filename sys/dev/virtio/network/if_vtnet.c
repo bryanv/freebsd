@@ -71,6 +71,7 @@ __FBSDID("$FreeBSD$");
 #include <netinet6/ip6_var.h>
 #include <netinet/udp.h>
 #include <netinet/tcp.h>
+#include <netinet/tcp_lro.h>
 
 #include <machine/bus.h>
 #include <machine/resource.h>
@@ -110,6 +111,7 @@ static void	vtnet_free_rxtx_queues(struct vtnet_softc *);
 static int	vtnet_alloc_rx_filters(struct vtnet_softc *);
 static void	vtnet_free_rx_filters(struct vtnet_softc *);
 static int	vtnet_alloc_virtqueues(struct vtnet_softc *);
+static int	vtnet_alloc_interface(struct vtnet_softc *);
 static int	vtnet_setup_interface(struct vtnet_softc *);
 static int	vtnet_ioctl_mtu(struct vtnet_softc *, int);
 static int	vtnet_ioctl_ifflags(struct vtnet_softc *);
@@ -432,6 +434,12 @@ vtnet_attach(device_t dev)
 
 	VTNET_CORE_LOCK_INIT(sc);
 	callout_init_mtx(&sc->vtnet_tick_ch, VTNET_CORE_MTX(sc), 0);
+
+	error = vtnet_alloc_interface(sc);
+	if (error) {
+		device_printf(dev, "cannot allocate interface\n");
+		goto fail;
+	}
 
 	vtnet_setup_sysctl(sc);
 	vtnet_setup_features(sc);
@@ -774,6 +782,12 @@ vtnet_init_rxq(struct vtnet_softc *sc, int id)
 	if (rxq->vtnrx_sg == NULL)
 		return (ENOMEM);
 
+#if defined(INET) || defined(INET6)
+	if (tcp_lro_init(&rxq->vtnrx_lro) != 0)
+		return (ENOMEM);
+	rxq->vtnrx_lro.ifp = sc->vtnet_ifp;
+#endif
+
 	NET_TASK_INIT(&rxq->vtnrx_intrtask, 0, vtnet_rxq_tq_intr, rxq);
 	rxq->vtnrx_tq = taskqueue_create(rxq->vtnrx_name, M_NOWAIT,
 	    taskqueue_thread_enqueue, &rxq->vtnrx_tq);
@@ -851,6 +865,10 @@ vtnet_destroy_rxq(struct vtnet_rxq *rxq)
 
 	rxq->vtnrx_sc = NULL;
 	rxq->vtnrx_id = -1;
+
+#if defined(INET) || defined(INET6)
+	tcp_lro_free(&rxq->vtnrx_lro);
+#endif
 
 	if (rxq->vtnrx_sg != NULL) {
 		sglist_free(rxq->vtnrx_sg);
@@ -991,6 +1009,25 @@ vtnet_alloc_virtqueues(struct vtnet_softc *sc)
 }
 
 static int
+vtnet_alloc_interface(struct vtnet_softc *sc)
+{
+	device_t dev;
+	struct ifnet *ifp;
+
+	dev = sc->vtnet_dev;
+
+	ifp = if_alloc(IFT_ETHER);
+	if (ifp == NULL)
+		return (ENOMEM);
+
+	sc->vtnet_ifp = ifp;
+	ifp->if_softc = sc;
+	if_initname(ifp, device_get_name(dev), device_get_unit(dev));
+
+	return (0);
+}
+
+static int
 vtnet_setup_interface(struct vtnet_softc *sc)
 {
 	device_t dev;
@@ -998,15 +1035,8 @@ vtnet_setup_interface(struct vtnet_softc *sc)
 	struct ifnet *ifp;
 
 	dev = sc->vtnet_dev;
+	ifp = sc->vtnet_ifp;
 
-	ifp = sc->vtnet_ifp = if_alloc(IFT_ETHER);
-	if (ifp == NULL) {
-		device_printf(dev, "cannot allocate ifnet structure\n");
-		return (ENOSPC);
-	}
-
-	if_initname(ifp, device_get_name(dev), device_get_unit(dev));
-	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST |
 	    IFF_KNOWSEPOCH;
 	ifp->if_baudrate = IF_Gbps(10);
@@ -1908,9 +1938,14 @@ vtnet_rxq_input(struct vtnet_rxq *rxq, struct mbuf *m,
 	rxq->vtnrx_stats.vrxs_ipackets++;
 	rxq->vtnrx_stats.vrxs_ibytes += m->m_pkthdr.len;
 
-	VTNET_RXQ_UNLOCK(rxq);
+#if defined(INET) || defined(INET6)
+	if (ifp->if_capenable & IFCAP_LRO && rxq->vtnrx_lro.lro_cnt != 0) {
+		if (tcp_lro_rx(&rxq->vtnrx_lro, m, 0) == 0)
+			return;
+	}
+#endif
+
 	(*ifp->if_input)(ifp, m);
-	VTNET_RXQ_LOCK(rxq);
 }
 
 static int
@@ -2015,14 +2050,14 @@ vtnet_rxq_eof(struct vtnet_rxq *rxq)
 		}
 
 		vtnet_rxq_input(rxq, m, &lhdr);
-
-		/* Must recheck after dropping the Rx lock. */
-		if ((ifp->if_drv_flags & IFF_DRV_RUNNING) == 0)
-			break;
 	}
 
-	if (deq > 0)
+	if (deq > 0) {
+#if defined(INET) || defined(INET6)
+		tcp_lro_flush_all(&rxq->vtnrx_lro);
+#endif
 		virtqueue_notify(vq);
+	}
 
 	return (count > 0 ? 0 : EAGAIN);
 }

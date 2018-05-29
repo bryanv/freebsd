@@ -79,6 +79,7 @@ struct vtnet_rxq {
 	struct vtnet_rxq_stats	 vtnrx_stats;
 	struct taskqueue	*vtnrx_tq;
 	struct task		 vtnrx_intrtask;
+	struct lro_ctrl	 	 vtnrx_lro;
 #ifdef DEV_NETMAP
 	struct virtio_net_hdr_mrg_rxbuf vtnrx_shrhdr;
 #endif  /* DEV_NETMAP */
@@ -324,8 +325,7 @@ CTASSERT(sizeof(struct vtnet_mac_filter) <= PAGE_SIZE);
 
 /*
  * The VIRTIO_NET_F_GUEST_TSO[46] features permit the host to send us
- * frames larger than 1514 bytes. We do not yet support software LRO
- * via tcp_lro_rx().
+ * frames larger than 1514 bytes.
  */
 #define VTNET_LRO_FEATURES (VIRTIO_NET_F_GUEST_TSO4 | \
     VIRTIO_NET_F_GUEST_TSO6 | VIRTIO_NET_F_GUEST_ECN)
