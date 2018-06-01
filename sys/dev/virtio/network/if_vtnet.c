@@ -2076,8 +2076,8 @@ again:
 		if (tries++ < VTNET_INTR_DISABLE_RETRIES)
 			goto again;
 
-		VTNET_RXQ_UNLOCK(rxq);
 		rxq->vtnrx_stats.vrxs_rescheduled++;
+		VTNET_RXQ_UNLOCK(rxq);
 		taskqueue_enqueue(rxq->vtnrx_tq, &rxq->vtnrx_intrtask);
 	} else
 		VTNET_RXQ_UNLOCK(rxq);
@@ -2107,10 +2107,10 @@ vtnet_rxq_tq_intr(void *xrxq, int pending)
 		if (!more)
 			vtnet_rxq_disable_intr(rxq);
 		rxq->vtnrx_stats.vrxs_rescheduled++;
+		VTNET_RXQ_UNLOCK(rxq);
 		taskqueue_enqueue(rxq->vtnrx_tq, &rxq->vtnrx_intrtask);
-	}
-
-	VTNET_RXQ_UNLOCK(rxq);
+	} else
+		VTNET_RXQ_UNLOCK(rxq);
 }
 
 static int
