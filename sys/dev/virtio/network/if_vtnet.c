@@ -232,6 +232,7 @@ static void	vtnet_setup_rxq_sysctl(struct sysctl_ctx_list *,
 static void	vtnet_setup_txq_sysctl(struct sysctl_ctx_list *,
 		    struct sysctl_oid_list *, struct vtnet_txq *);
 static void	vtnet_setup_queue_sysctl(struct vtnet_softc *);
+static void	vtnet_load_tunables(struct vtnet_softc *);
 static void	vtnet_setup_sysctl(struct vtnet_softc *);
 
 static int	vtnet_rxq_enable_intr(struct vtnet_rxq *);
@@ -291,6 +292,15 @@ static int vtnet_rx_process_limit = 512;
 SYSCTL_INT(_hw_vtnet, OID_AUTO, rx_process_limit, CTLFLAG_RDTUN,
     &vtnet_rx_process_limit, 0,
     "Number of RX segments processed in one pass");
+
+static int vtnet_lro_entry_count = 128;
+SYSCTL_INT(_hw_vtnet, OID_AUTO, lro_entry_count, CTLFLAG_RDTUN,
+    &vtnet_lro_entry_count, 0, "Software LRO entry count");
+
+/* Enable sorted LRO, and the depth of the mbuf queue. */
+static int vtnet_lro_mbufq_depth = 0;
+SYSCTL_UINT(_hw_vtnet, OID_AUTO, lro_mbufq_depth, CTLFLAG_RDTUN,
+    &vtnet_lro_mbufq_depth, 0, "Depth of software LRO mbuf queue");
 
 static uma_zone_t vtnet_tx_header_zone;
 
@@ -417,6 +427,7 @@ vtnet_attach(device_t dev)
 
 	VTNET_CORE_LOCK_INIT(sc);
 	callout_init_mtx(&sc->vtnet_tick_ch, VTNET_CORE_MTX(sc), 0);
+	vtnet_load_tunables(sc);
 
 	error = vtnet_alloc_interface(sc);
 	if (error) {
@@ -670,8 +681,8 @@ vtnet_negotiate_features(struct vtnet_softc *sc)
 		 */
 		if (!virtio_with_feature(dev, VIRTIO_RING_F_INDIRECT_DESC)) {
 			device_printf(dev,
-			    "LRO disabled since both mergeable buffers and "
-			    "indirect descriptors were not negotiated\n");
+			    "Host LRO disabled since both mergeable buffers "
+			    "and indirect descriptors were not negotiated\n");
 			features &= ~VTNET_LRO_FEATURES;
 			negotiated_features =
 			    virtio_negotiate_features(dev, features);
@@ -727,6 +738,14 @@ vtnet_setup_features(struct vtnet_softc *sc)
 		sc->vtnet_rx_nsegs = VTNET_RX_SEGS_LRO_NOMRG;
 	else
 		sc->vtnet_rx_nsegs = VTNET_RX_SEGS_HDR_SEPARATE;
+
+	/*
+	 * Favor "hardware" LRO if negotiated, but support software LRO as
+	 * a fallback; there is usually little benefit (or worse) with both.
+	 */
+	if (virtio_with_feature(dev, VIRTIO_NET_F_GUEST_TSO4) == 0 &&
+	    virtio_with_feature(dev, VIRTIO_NET_F_GUEST_TSO6) == 0)
+		sc->vtnet_flags |= VTNET_FLAG_SW_LRO;
 
 	if (virtio_with_feature(dev, VIRTIO_NET_F_GSO) ||
 	    virtio_with_feature(dev, VIRTIO_NET_F_HOST_TSO4) ||
@@ -797,9 +816,11 @@ vtnet_init_rxq(struct vtnet_softc *sc, int id)
 		return (ENOMEM);
 
 #if defined(INET) || defined(INET6)
-	if (tcp_lro_init(&rxq->vtnrx_lro) != 0)
-		return (ENOMEM);
-	rxq->vtnrx_lro.ifp = sc->vtnet_ifp;
+	if (vtnet_software_lro(sc)) {
+		if (tcp_lro_init_args(&rxq->vtnrx_lro, sc->vtnet_ifp,
+		    sc->vtnet_lro_entry_count, sc->vtnet_lro_mbufq_depth) != 0)
+			return (ENOMEM);
+	}
 #endif
 
 	TASK_INIT(&rxq->vtnrx_intrtask, 0, vtnet_rxq_tq_intr, rxq);
@@ -1124,10 +1145,8 @@ vtnet_setup_interface(struct vtnet_softc *sc)
 		    vtnet_fixup_needs_csum) != 0)
 			sc->vtnet_flags |= VTNET_FLAG_FIXUP_NEEDS_CSUM;
 
-		if (virtio_with_feature(dev, VIRTIO_NET_F_GUEST_TSO4) ||
-		    virtio_with_feature(dev, VIRTIO_NET_F_GUEST_TSO6) ||
-		    virtio_with_feature(dev, VIRTIO_NET_F_GUEST_ECN))
-			ifp->if_capabilities |= IFCAP_LRO;
+		/* Support either "hardware" or software LRO. */
+		ifp->if_capabilities |= IFCAP_LRO;
 	}
 
 	if (ifp->if_capabilities & (IFCAP_HWCSUM | IFCAP_HWCSUM_IPV6)) {
@@ -1311,6 +1330,11 @@ vtnet_ioctl_ifcap(struct vtnet_softc *sc, struct ifreq *ifr)
 			update = 1;
 		else
 			reinit = 1;
+
+		/* BMV: Avoid needless renegotiation for just software LRO. */
+		if ((mask & (IFCAP_RXCSUM | IFCAP_RXCSUM_IPV6 | IFCAP_LRO)) ==
+		    IFCAP_LRO && vtnet_software_lro(sc))
+			reinit = update = 0;
 
 		if (mask & IFCAP_RXCSUM)
 			ifp->if_capenable ^= IFCAP_RXCSUM;
@@ -1907,6 +1931,23 @@ fail:
 	return (1);
 }
 
+#if defined(INET) || defined(INET6)
+static int
+vtnet_lro_rx(struct vtnet_rxq *rxq, struct mbuf *m)
+{
+	struct lro_ctrl *lro;
+
+	lro = &rxq->vtnrx_lro;
+
+	if (lro->lro_mbuf_max != 0) {
+		tcp_lro_queue_mbuf(lro, m);
+		return (0);
+	}
+
+	return (tcp_lro_rx(lro, m, 0));
+}
+#endif
+
 static void
 vtnet_rxq_input(struct vtnet_rxq *rxq, struct mbuf *m,
     struct virtio_net_hdr *hdr)
@@ -1945,8 +1986,8 @@ vtnet_rxq_input(struct vtnet_rxq *rxq, struct mbuf *m,
 	rxq->vtnrx_stats.vrxs_ibytes += m->m_pkthdr.len;
 
 #if defined(INET) || defined(INET6)
-	if (ifp->if_capenable & IFCAP_LRO && rxq->vtnrx_lro.lro_cnt != 0) {
-		if (tcp_lro_rx(&rxq->vtnrx_lro, m, 0) == 0)
+	if (vtnet_software_lro(sc) && ifp->if_capenable & IFCAP_LRO) {
+		if (vtnet_lro_rx(rxq, m) == 0)
 			return;
 	}
 #endif
@@ -3247,7 +3288,7 @@ vtnet_update_rx_offloads(struct vtnet_softc *sc)
 			features &= ~VIRTIO_NET_F_GUEST_CSUM;
 	}
 
-	if (ifp->if_capabilities & IFCAP_LRO) {
+	if (ifp->if_capabilities & IFCAP_LRO && !vtnet_software_lro(sc)) {
 		if (ifp->if_capenable & IFCAP_LRO)
 			features |= VTNET_LRO_FEATURES;
 		else
@@ -4118,6 +4159,19 @@ vtnet_setup_sysctl(struct vtnet_softc *sc)
 	    "Number of active virtqueue pairs");
 
 	vtnet_setup_stat_sysctl(ctx, child, sc);
+}
+
+static void
+vtnet_load_tunables(struct vtnet_softc *sc)
+{
+
+	sc->vtnet_lro_entry_count = vtnet_tunable_int(sc,
+	    "lro_entry_count", vtnet_lro_entry_count);
+	if (sc->vtnet_lro_entry_count < TCP_LRO_ENTRIES)
+		sc->vtnet_lro_entry_count = TCP_LRO_ENTRIES;
+
+	sc->vtnet_lro_mbufq_depth = vtnet_tunable_int(sc,
+	    "lro_mbufq_depeth", vtnet_lro_mbufq_depth);
 }
 
 static int
