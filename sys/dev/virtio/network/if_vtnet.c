@@ -288,7 +288,7 @@ static int vtnet_tso_maxlen = IP_MAXPACKET;
 SYSCTL_INT(_hw_vtnet, OID_AUTO, tso_maxlen, CTLFLAG_RDTUN,
     &vtnet_tso_maxlen, 0, "TSO burst limit");
 
-static int vtnet_rx_process_limit = 512;
+static int vtnet_rx_process_limit = 1024;
 SYSCTL_INT(_hw_vtnet, OID_AUTO, rx_process_limit, CTLFLAG_RDTUN,
     &vtnet_rx_process_limit, 0,
     "Number of RX segments processed in one pass");
