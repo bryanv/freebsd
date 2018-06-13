@@ -99,7 +99,6 @@ static int	vtpci_legacy_alloc_resources(struct vtpci_legacy_softc *);
 static void	vtpci_legacy_free_resources(struct vtpci_legacy_softc *);
 
 static void	vtpci_legacy_probe_and_attach_child(struct vtpci_legacy_softc *);
-static void	vtpci_legacy_release_child_resources(struct vtpci_legacy_softc *);
 
 static uint8_t	vtpci_legacy_get_status(struct vtpci_legacy_softc *);
 static void	vtpci_legacy_set_status(struct vtpci_legacy_softc *, uint8_t);
@@ -289,7 +288,7 @@ vtpci_legacy_child_detached(device_t dev, device_t child)
 	sc = device_get_softc(dev);
 
 	vtpci_legacy_reset(sc);
-	vtpci_legacy_release_child_resources(sc);
+	vtpci_child_detached(&sc->vtpci_common);
 
 	/* After the reset, retell the host we've noticed this device. */
 	vtpci_legacy_set_status(sc, VIRTIO_CONFIG_STATUS_ACK);
@@ -646,12 +645,6 @@ vtpci_legacy_register_vq_msix(device_t dev, int idx,
 	}
 
 	return (0);
-}
-
-static void
-vtpci_legacy_release_child_resources(struct vtpci_legacy_softc *sc)
-{
-	vtpci_release_child_resources(&sc->vtpci_common);
 }
 
 static void

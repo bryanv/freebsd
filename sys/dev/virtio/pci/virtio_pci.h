@@ -113,6 +113,7 @@ vtpci_virtqueue_count(struct vtpci_common *cn)
 void	vtpci_init(struct vtpci_common *cn, device_t dev, bool modern);
 int	vtpci_add_child(struct vtpci_common *cn);
 int	vtpci_delete_child(struct vtpci_common *cn);
+void	vtpci_child_detached(struct vtpci_common *cn);
 int	vtpci_reinit(struct vtpci_common *cn);
 
 uint64_t vtpci_negotiate_features(struct vtpci_common *cn,

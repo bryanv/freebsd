@@ -195,6 +195,16 @@ vtpci_delete_child(struct vtpci_common *cn)
 	return (0);
 }
 
+void
+vtpci_child_detached(struct vtpci_common *cn)
+{
+
+	vtpci_release_child_resources(cn);
+
+	cn->vtpci_child_feat_desc = NULL;
+	cn->vtpci_features = 0;
+}
+
 int
 vtpci_reinit(struct vtpci_common *cn)
 {

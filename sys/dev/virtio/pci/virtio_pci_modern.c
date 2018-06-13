@@ -144,7 +144,6 @@ static void	vtpci_modern_alloc_msix_resource(struct vtpci_modern_softc *);
 static void	vtpci_modern_free_msix_resource(struct vtpci_modern_softc *);
 
 static void	vtpci_modern_probe_and_attach_child(struct vtpci_modern_softc *);
-static void	vtpci_modern_release_child_resources(struct vtpci_modern_softc *);
 
 static uint64_t vtpci_modern_read_features(struct vtpci_modern_softc *);
 static void	vtpci_modern_write_features(struct vtpci_modern_softc *,
@@ -377,7 +376,7 @@ vtpci_modern_child_detached(device_t dev, device_t child)
 	sc = device_get_softc(dev);
 
 	vtpci_modern_reset(sc);
-	vtpci_modern_release_child_resources(sc);
+	vtpci_child_detached(&sc->vtpci_common);
 
 	/* After the reset, retell the host we've noticed this device. */
 	vtpci_modern_set_status(sc, VIRTIO_CONFIG_STATUS_ACK);
@@ -1208,12 +1207,6 @@ vtpci_modern_register_vq_msix(device_t dev, int idx,
 	}
 
 	return (0);
-}
-
-static void
-vtpci_modern_release_child_resources(struct vtpci_modern_softc *sc)
-{
-	vtpci_release_child_resources(&sc->vtpci_common);
 }
 
 static void
