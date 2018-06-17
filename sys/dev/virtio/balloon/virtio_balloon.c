@@ -159,7 +159,9 @@ static devclass_t vtballoon_devclass;
 
 DRIVER_MODULE(virtio_balloon, virtio_mmio, vtballoon_driver,
     vtballoon_devclass, 0, 0);
-DRIVER_MODULE(virtio_balloon, virtio_pci_legacy, vtballoon_driver,
+DRIVER_MODULE(virtio_balloon, vtpcil, vtballoon_driver,
+    vtballoon_devclass, 0, 0);
+DRIVER_MODULE(virtio_balloon, vtpcim, vtballoon_driver,
     vtballoon_devclass, 0, 0);
 MODULE_VERSION(virtio_balloon, 1);
 MODULE_DEPEND(virtio_balloon, virtio, 1, 1, 1);
