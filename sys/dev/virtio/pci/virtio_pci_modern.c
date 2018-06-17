@@ -235,15 +235,14 @@ static device_method_t vtpci_modern_methods[] = {
 };
 
 static driver_t vtpci_modern_driver = {
-	"virtio_pci_modern",
-	vtpci_modern_methods,
-	sizeof(struct vtpci_modern_softc)
+	.name = "vtpcim",
+	.methods = vtpci_modern_methods,
+	.size = sizeof(struct vtpci_modern_softc)
 };
 
 devclass_t vtpci_modern_devclass;
 
-DRIVER_MODULE(virtio_pci_modern, pci, vtpci_modern_driver,
-    vtpci_modern_devclass, 0, 0);
+DRIVER_MODULE(vtpcim, pci, vtpci_modern_driver, vtpci_modern_devclass, 0, 0);
 
 static int
 vtpci_modern_probe(device_t dev)

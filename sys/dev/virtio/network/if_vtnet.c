@@ -353,16 +353,16 @@ static device_method_t vtnet_methods[] = {
 #endif
 
 static driver_t vtnet_driver = {
-    .name = "vtnet",
-    .methods = vtnet_methods,
-    .size = sizeof(struct vtnet_softc)
+	.name = "vtnet",
+	.methods = vtnet_methods,
+	.size = sizeof(struct vtnet_softc)
 };
 static devclass_t vtnet_devclass;
 
 DRIVER_MODULE(vtnet, virtio_mmio, vtnet_driver, vtnet_devclass,
     vtnet_modevent, 0);
-DRIVER_MODULE(vtnet, virtio_pci_legacy, vtnet_driver, vtnet_devclass,
-    vtnet_modevent, 0);
+DRIVER_MODULE(vtnet, vtpcil, vtnet_driver, vtnet_devclass, vtnet_modevent, 0);
+DRIVER_MODULE(vtnet, vtpcim, vtnet_driver, vtnet_devclass, vtnet_modevent, 0);
 MODULE_VERSION(vtnet, 1);
 MODULE_DEPEND(vtnet, virtio, 1, 1, 1);
 #ifdef DEV_NETMAP
