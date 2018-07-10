@@ -58,7 +58,8 @@ static int	vtrnd_probe(device_t);
 static int	vtrnd_attach(device_t);
 static int	vtrnd_detach(device_t);
 
-static void	vtrnd_negotiate_features(struct vtrnd_softc *);
+static int	vtrnd_negotiate_features(struct vtrnd_softc *);
+static int	vtrnd_setup_features(struct vtrnd_softc *);
 static int	vtrnd_alloc_virtqueue(struct vtrnd_softc *);
 static void	vtrnd_harvest(struct vtrnd_softc *);
 static void	vtrnd_timer(void *);
@@ -132,11 +133,15 @@ vtrnd_attach(device_t dev)
 
 	sc = device_get_softc(dev);
 	sc->vtrnd_dev = dev;
+	virtio_set_feature_desc(dev, vtrnd_feature_desc);
 
 	callout_init(&sc->vtrnd_callout, 1);
 
-	virtio_set_feature_desc(dev, vtrnd_feature_desc);
-	vtrnd_negotiate_features(sc);
+	error = vtrnd_setup_features(sc);
+	if (error) {
+		device_printf(dev, "cannot setup features\n");
+		goto fail;
+	}
 
 	error = vtrnd_alloc_virtqueue(sc);
 	if (error) {
@@ -165,7 +170,7 @@ vtrnd_detach(device_t dev)
 	return (0);
 }
 
-static void
+static int
 vtrnd_negotiate_features(struct vtrnd_softc *sc)
 {
 	device_t dev;
@@ -175,7 +180,19 @@ vtrnd_negotiate_features(struct vtrnd_softc *sc)
 	features = VTRND_FEATURES;
 
 	sc->vtrnd_features = virtio_negotiate_features(dev, features);
-	virtio_finalize_features(dev);
+	return (virtio_finalize_features(dev));
+}
+
+static int
+vtrnd_setup_features(struct vtrnd_softc *sc)
+{
+	int error;
+
+	error = vtrnd_negotiate_features(sc);
+	if (error)
+		return (error);
+
+	return (0);
 }
 
 static int
