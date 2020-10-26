@@ -1819,10 +1819,9 @@ vtnet_rxq_eof(struct vtnet_rxq *rxq)
 			adjsz = sizeof(struct vtnet_rx_header);
 			/*
 			 * Account for our pad inserted between the header
-			 * and the actual start of the frame. This includes
-			 * the unused num_buffers when using a legacy device.
+			 * and the actual start of the frame.
 			 */
-			len += adjsz - sc->vtnet_hdr_size;
+			len += VTNET_RX_HEADER_PAD;
 		} else {
 			mhdr = mtod(m, struct virtio_net_hdr_mrg_rxbuf *);
 			nbufs = mhdr->num_buffers;
