@@ -24,7 +24,7 @@
 .\"
 .\" $FreeBSD$
 .\"
-.Dd January 22, 2012
+.Dd January 1, 2021
 .Dt VTNET 4
 .Os
 .Sh NAME
@@ -88,7 +88,7 @@ The default value is 0.
 .It Va hw.vtnet. Ns Ar X Ns Va .mq_max_pairs
 This tunable sets the maximum number of transmit and receive queue pairs.
 Multiple queues are only supported when the Multiqueue feature is negotiated.
-This driver supports a maximum of 8 queue pairs.
+This driver supports a maximum of 32 queue pairs.
 The number of queue pairs used is the lesser of the maximum supported by the
 driver and the hypervisor, the number of CPUs present in the guest, and this
 tunable if not zero.
@@ -108,8 +108,3 @@ driver was written by
 .An Bryan Venteicher Aq Mt bryanv@FreeBSD.org .
 It first appeared in
 .Fx 9.0 .
-.Sh CAVEATS
-The
-.Nm
-driver only supports LRO when the hypervisor advertises the
-mergeable buffer feature.
